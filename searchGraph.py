@@ -1512,6 +1512,7 @@ def test_sketch_syn_data(args):
         
         test_svd = True #False  <--toggle this
         #test_svd = False  #<--toggle this
+            print('Can toggle between using spectral or COPT to reduce graphs.')
         if test_svd:
             print('Using spectral methods to reduce graph.')
             cur_idx = classify_filter_svd(dataset, val_set, args, dataset_cls=dataset_cls, tgt_cls=val_cls)

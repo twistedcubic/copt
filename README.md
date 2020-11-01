@@ -26,6 +26,11 @@ There is a [data](data) directory used by the scripts to write data to. There is
 PyTorch 1.1+
 numpy
 networkx
+grakel
+netlsd
+
+To install PyTorch
+The other packages can be installed via `pip`, e.g. `python -m pip install numpy networkx grakel netlsd`
 
 Depending on the functionalities one wishes to run, additional dependencies include:
 [Gromov Wasserstein by Vayer et al](https://github.com/tvayer/FGW), can be placed as "gromov" in directory above this one.

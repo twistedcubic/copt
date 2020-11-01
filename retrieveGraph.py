@@ -21,7 +21,6 @@ import runGraph
 import os
 import math
 import netlsd
-import ComputeAccuracy
 from sklearn.pipeline import Pipeline
 import grakel
 from sklearn.svm import SVC
@@ -1211,64 +1210,6 @@ def classify(dataset, queries, cur_idx, dataset_cls, target, args, dataset0=None
     print('gw acc ', gw_acc)
     return
 
-def classify0(dataset, queries, dataset_cls, target, args, dataset0=None, queries0=None):
-    """
-    classify graphs,
-    dataset0, queries0 are original, non-sketched graphs.
-    """
-    #args.n_graphs = 2
-    #args.graph_fname = 'data/graphs.pkl'
-    args.alpha = 0.8
-    if dataset0 is None:
-        dataset0 = dataset
-        queries0 = queries    
-    #with open(args.graph_fname, 'rb') as f:
-    #    graphs = pickle.read(f)
-    n_data = len(dataset)
-    n_queries = len(queries)
-    ot_cost = np.zeros((len(queries), len(dataset)))
-    gw_cost = np.zeros((len(queries), len(dataset)))
-    gwdist = Fused_Gromov_Wasserstein_distance(alpha=args.alpha,features_metric='sqeuclidean')
-    Ly_mx = []
-    Lx_mx = []
-    data_graphs = []
-    for i, data in enumerate(dataset):
-        n_nodes = len(data.nodes())
-        L = utils.graph_to_lap(data)
-        #Ly_mx.append(L[torch.triu(torch.ones(n_nodes, n_nodes), diagonal=1) > 0])
-        Ly_mx.append(L)
-        data_graphs.append(gwGraph.Graph(dataset0[i]))
-    #pdb.set_trace()
-    for i, q in enumerate(tqdm(queries, desc='queries')):
-        Lx = utils.graph_to_lap(q)
-        args.Lx = Lx
-        q_graph = gwGraph.Graph(queries0[i])
-        args.m = len(q.nodes())
-        Lx_mx.append(args.Lx)        
-        for j, data in enumerate(dataset):        
-            gw_cost[i][j] = gwdist.graph_d(q_graph, data_graphs[j ])
-            
-    ot_cost_ = torch.from_numpy(ot_cost)
-    #for combined, can add dist here
-    ot_cost_ranks = torch.argsort(ot_cost_, -1)[:, :args.n_per_cls]
-    gw_cost_ = torch.from_numpy(gw_cost)
-    gw_cost_ranks = torch.argsort(gw_cost_, -1)[:, :args.n_per_cls]    
-    ones = torch.ones(100)  #args.n_per_cls*2 (n_cls*2)
-    ot_cls = -np.ones(n_queries)
-    gw_cls = -np.ones(n_queries)
-    combine_cls = np.ones(n_queries)
-    dataset_cls_t = torch.from_numpy(dataset_cls)
-    #pdb.set_trace()
-    for i in range(n_queries): #for each cls
-        cur_ranks = dataset_cls_t[gw_cost_ranks[i]]
-        #cur_ranks = dataset_cls_t[ranks_i]
-        ranked = torch.zeros(100) #n_cls*2)
-        ranked.scatter_add_(src=ones, index=cur_ranks, dim=-1)
-        gw_cls[i] = torch.argmax(ranked).item()
-    
-    gw_acc = np.equal(gw_cls, target).sum() / len(target)
-    print('gw acc ', gw_acc)
-    return
 
 def sketch_graph(graphs, lo_dim, args):
     '''
@@ -1472,7 +1413,7 @@ if __name__ == '__main__':
         method = 'algebraic_JC'
         #BZR_MD7_otc.pkl
         method = 'otc'
-        #method = 'copt'
+        method = 'copt'
         #enz_data = torch.load('enzymes_lap.pt')
         #dataset_name = 'enzymes' #enzymes or mutag
         dataset_name = 'ENZYMES' #
@@ -1496,7 +1437,7 @@ if __name__ == '__main__':
             sizes = [d.shape for d in data_sketch]
             
         else:
-            enz_data = torch.load('{}_lap.pt'.format(dataset_name))
+            enz_data = torch.load('data/{}_lap.pt'.format(dataset_name))
             print('dataset: {} compress fac {}'.format( dataset_name, args.compress_fac))
 
             dataset = enz_data['lap']
@@ -1561,7 +1502,7 @@ if __name__ == '__main__':
         print('{} retrieval acc {}+-{} on {}'.format(method, acc_mean, acc_std, dataset_name))
         pdb.set_trace()
         #classify(dataset, val_set, cur_idx, dataset_cls, val_cls, args, dataset0=dataset, queries0=val_set)
-        #classify0(dataset, val_set, dataset_cls, val_cls, args, dataset0=dataset, queries0=val_set)
+        
 
     test_sketching = False #True
     #test_sketching = True

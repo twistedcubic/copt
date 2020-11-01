@@ -219,7 +219,6 @@ if __name__ == '__main__':
         dataset, dataset_cls = dataset1[50:], dataset_cls1[50:]
         val_set, val_cls = dataset1[:50], dataset_cls1[:50]
         
-        #val_set, val_cls = utils.load_data('data/queries_sketch{}_{}rand.pkl'.format(data_dim, lo_dim))
     else:
         #dataset_lo, dataset_cls_lo = utils.load_data('data/train_graphs_sketch{}_{}rand.pkl'.format(data_dim, lo_dim))
         #dataset0, dataset_cls0 = utils.load_data('data/train_graphs{}rand.pkl'.format(data_dim))
