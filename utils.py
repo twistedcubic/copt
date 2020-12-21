@@ -24,21 +24,24 @@ torch_dtype = torch.float64 #torch.float32
 res_dir = 'results'
 data_dir = 'data'
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-device = 'cpu' #set to CPU here for fair timing comparison
+#device = 'cpu' #Can set to CPU here for timing comparison
 
 def parse_args():
     parser = argparse.ArgumentParser()
     #
-    parser.add_argument("--m", default=30, type=int, help='Number of vertices in graph X, e.g. query graph')
-    parser.add_argument("--n", default=30, type=int, help='Number of vertices in graph Y, e.g. dataset graph')
-    parser.add_argument("--dataset_name", type=str, default=None, help='dataset name')    
     parser.add_argument("--verbose", dest='verbose', action='store_const', default=False, const=True, help='Print out verbose info during optimization')
     parser.add_argument("--seed", dest='fix_seed', action='store_const', default=False, const=True, help='Fix seed for reproducibility and fair comparison.')
     parser.add_argument("--n_epochs", dest='n_epochs', type=int, default=300, help='Number of COPT iterations during training.')
     parser.add_argument("--hike", dest='lr_hike', action='store_const', default=False, const=True, help='Use learning rate hiking. This is recommended for most applications.')
-    parser.add_argument("--hike_interval", dest='hike_interval', type=int, default=10, help='Number of iterations having *low loss* between lr hikes.')
+    parser.add_argument("--hike_interval", dest='hike_interval', type=int, default=15, help='Number of iterations having *low loss* between lr hikes.')
     parser.add_argument("--fast", dest='fast', action='store_const', default=False, const=True, help='Use fast kernel, in particular multiscale laplacian')
     parser.add_argument("--early_stopping", action='store_true', default=False, help='stop training early if loss repeatedly reaches below some threshold, useful for sketching.')
+    
+    parser.add_argument("--dataset_type", type=str, default='synthetic', help='dataset type, can be "synthetic" or "real"') 
+    parser.add_argument("--dataset_name", type=str, default='PROTEINS', help='dataset name, will be ignored if dataset_type is synthetic')  
+    parser.add_argument("--m", default=30, type=int, help='Number of vertices in graph X, e.g. query graph, useful especially when testing')
+    parser.add_argument("--n", default=30, type=int, help='Number of vertices in graph Y, e.g. dataset graph, useful especially when testing')  
+
     parser.add_argument("--sinkhorn_iter", type=int, default=10, help='Number of Sinkhorn scaling iterations during optimization')
     parser.add_argument("--grid_search", dest='grid_search', action='store_const', default=False, const=True, help='grid search for learning SVC classifier')
     parser.add_argument("--compress_fac", default=-1, type=int, help='Factor of compression, e.g. 2 means reduce to half as many vertices')
@@ -186,7 +189,10 @@ def fetch_data_graphs(dataset_name):
     #this assumes data (graph laplacians) are have been created or downloaded to file dataname_lap.pt.
     """
     #torch.save({'lap':lap_l, 'labels':node_labels, 'target':target}, '{}_lap.pt'.format(dataset_name))
-    data = torch.load('{}_lap.pt'.format(dataset_name))
+    try:
+        data = torch.load('data/{}_lap.pt'.format(dataset_name))
+    except Exception:
+        raise Exception('Dataset {} graph data not created yet. More data can be created using the generateData.py script as in README.'.format(dataset_name))
     graphs = []
     for g in data['lap']:
         graph = lap_to_graph(g)

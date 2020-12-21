@@ -1,4 +1,10 @@
 
+"""
+Can be run e.g.:
+python runGraph.py --hike --hike_interval 10 --dataset_type real --dataset_name PROTEINS
+python runGraph.py --hike --hike_interval 10 --dataset_type synthetic
+"""
+
 import _init_paths
 import utils
 import graph
@@ -10,16 +16,17 @@ try:
     import lib.graph as gwGraph
     from lib.ot_distances import Fused_Gromov_Wasserstein_distance
 except:
-    print('NOTE: GW library not found. Clone the GW repo as in README if needed.')
+    print('NOTE: GW library not found. This is not required. Clone the GW repo as in README if running GW baseline')
     
 import numpy as np
 import pickle
 from tqdm import tqdm
-import stochastic as st
+import got_stochastic as st
 import sys
 import time
 import sklearn.model_selection
 import netlsd
+
 import collections
 
 import pdb
@@ -58,29 +65,27 @@ def classify_st(dataset, queries, dataset_cls, target, args, dataset0=None, quer
         args.Lx = Lx
         
         args.m = len(q.nodes())
-        Lx_mx.append(args.Lx)        
+        Lx_mx.append(args.Lx)
+        n_repeat = 1 #1 works fine
         for j, data in enumerate(dataset):
-            #graphs.append(utils.create_graph(args.m))
+            
             Ly = Ly_mx[j].clone()
             args.n = len(Ly)
-            #if i==2 and j == 2:
-            #    pdb.set_trace()
             min_loss = 10000
-            #'''
-            for _ in range(1):
+            
+            for _ in range(n_repeat):
                 loss, P, Ly_ = graph.graph_dist(args, plot=False, Ly=Ly, take_ly_exp=False)                
                 if loss < min_loss:
                     min_loss = loss                
-            #'''
+            
             ot_cost[i][j] = min_loss
             try:
                 x_reg, y_reg, (P_st, loss_st) = st.find_permutation(Lx.cpu().numpy(), Ly.cpu().numpy(), args.st_it, args.st_tau, args.st_n_samples, args.st_epochs, args.st_lr, loss_type = 'w', alpha = 0, ones = True, graphs = True) #l2
-            except e:
-                pdb.set_trace()
+            except Exception:
+                print('Exception encountered during GOT')
+                #pdb.set_trace()
                 
-            st_cost[i][j] = loss_st
-            
-            
+            st_cost[i][j] = loss_st            
           
     ##can also try median, or dataset_cls[np.argsort(ot_cost[-8],-1)[:10]], or  dataset_cls[np.argpartition(ot_cost[6],10)[:10]]
     ot_cost_ = torch.from_numpy(ot_cost)
@@ -90,14 +95,13 @@ def classify_st(dataset, queries, dataset_cls, target, args, dataset0=None, quer
     ot_cls = np.ones(n_queries)
     
     dataset_cls_t = torch.from_numpy(dataset_cls)
-    #pdb.set_trace()
+    
     for i in range(n_queries): #for each cls 
         cur_ranks = dataset_cls_t[ot_cost_ranks[i]]
         ranked = torch.zeros(100) #n_cls*2
         ranked.scatter_add_(src=ones, index=cur_ranks, dim=-1)
         ot_cls[i] = torch.argmax(ranked).item()
-        ###
-        
+                
     ot_cost_means = np.mean(ot_cost.reshape(n_queries, n_data//args.n_per_cls, args.n_per_cls), axis=-1)
     ot_idx = np.argmin(ot_cost_means, axis=-1) * args.n_per_cls
     
@@ -151,7 +155,7 @@ def classify(dataset, queries, dataset_cls, target, args, dataset0=None, queries
         Ly_mx.append(L)
         #pdb.set_trace()
         
-        #heat_l.append(netlsd.heat(L.numpy())) 
+        heat_l.append(netlsd.heat(L.numpy())) 
     #avg_deg /= len(dataset)
     
     for i, q in enumerate(tqdm(queries, desc='queries')):
@@ -187,18 +191,15 @@ def classify(dataset, queries, dataset_cls, target, args, dataset0=None, queries
                     min_loss = loss            
             
             ot_cost[i][j] = min_loss
-            
-            #netlsd_cost[i][j] = netlsd.compare(q_heat, heat_l[j])
-        
-    if args.use_imdb:
+            netlsd_cost[i][j] = netlsd.compare(q_heat, heat_l[j])
+                    
+    if args.dataset_type == 'real':
         ot_cost1 = (ot_cost-ot_cost.mean())/np.std(ot_cost)
         ot_pred = ot_cost.argmin(1)
         ot_acc00 = np.equal(dataset_cls[ot_pred],target).sum()/len(target)
         
         print('OT ACC |{} '.format(ot_acc00))
-        
-        pdb.set_trace()
-        
+                
         ot_sorted = np.argsort(ot_cost, axis=-1)
         
         #pdb.set_trace()
@@ -575,15 +576,41 @@ def run_same_dim(args):
     graph.graph_dist(args)
     return
 
+def main_real_data(args):
+    dataset_name = args.dataset_name #e.g. 'PROTEINS' 
+    print('dataste name {}'.format(dataset_name))
+    try:
+        data, node_labels, cls = utils.fetch_data_graphs(dataset_name)
+    except Exception:
+        raise Exception('Dataset {} graph data not created yet. More data can be created using the generateData.py script as in README.'.format(dataset_name))
+    #data, node_labels, cls = utils.fetch_data(dataset_name)
+    #Can update the number of queries and data to classify against
+    n_q = 10 #30 #30 #30    
+    n_data = 30 #100 #100 #100
+    print('number of query graphs {} number of data graphs {}'.format(n_q, n_data))
+    n_runs = 1 # 10
+    ot_acc_l = np.zeros(n_runs)
+    gw_acc_l = np.zeros(n_runs)
+    netlsd_acc_l = np.zeros(n_runs)
+    combine_acc_l = np.zeros(n_runs)
+    for i in range(n_runs):        
+        #dataset0, queries0, dataset_cls, target = sklearn.model_selection.train_test_split(data, cls, test_size=.2, random_state=42*i)            
+        dataset0, queries0, dataset_cls, target = sklearn.model_selection.train_test_split(data, cls, test_size=.2)
+
+        dataset0, queries0, dataset_cls, target = dataset0[:n_data], queries0[:n_q], dataset_cls[:n_data], target[:n_q]            
+        dataset, queries = dataset0, queries0
+
+        ot_acc, netlsd_acc = classify(dataset, queries, dataset_cls, target, args, dataset0=dataset0, queries0=queries0)
+        ot_acc_l[i] = ot_acc        
+        netlsd_acc_l[i] = netlsd_acc
+        
+        print('SO FAR mean ot acc ({}) ot std {} netlsd acc {} netlsd std {} '.format(np.mean(ot_acc_l[:i+1]), np.std(ot_acc_l[:i+1]), np.mean(netlsd_acc_l[:i+1]), np.std(netlsd_acc_l[:i+1]), ))
+
+    #print('mean ot acc {} ot std {} gw acc {} gw std {} netlsd acc {} netlsd std {}'.format(np.mean(ot_acc_l), np.std(ot_acc_l), np.mean(gw_acc_l), np.std(gw_acc_l), np.mean(netlsd_acc_l), np.std(netlsd_acc_l) ))
+    return dataset0, queries0, dataset_cls, target
+    
 if __name__ == '__main__':
     args = utils.parse_args()
-    scheme = 'lo_hi' #in format of query_data. 'hi_lo'
-    if scheme == 'lo_hi':
-        #q stands for query
-        q_dim, data_dim = 20, 20 #50 #100
-        #q_dim, data_dim = 20, 30 #100
-    else:
-        q_dim, data_dim = 20, 10
     if args.fix_seed:
         np.random.seed(42)
         torch.manual_seed(42)
@@ -591,79 +618,59 @@ if __name__ == '__main__':
     if not args.lr_hike:
         print('NOTE: for best (and faster) results, consider settings args.hike to True. Done by running with "--hike" argument')
         
-    args.n_per_cls = 1 #15
-    args.query_n_per_cls = 1 #15
-    #use command line to set GOT and GW parameters, sample settings: args.st_it, args.st_tau, args.st_n_samples, args.st_epochs, args.st_lr = 5, 1, 10, 1000, .5    
-    #generate_graph = False
-    generate_graph = True
-    if generate_graph: 
-        create_graphs(q_dim, args, 'data/queries{}rand.pkl'.format(q_dim), n_graphs=args.query_n_per_cls, low=q_dim) 
-        create_graphs(data_dim, args, 'data/graphs{}rand.pkl'.format(data_dim), n_graphs=args.n_per_cls, low=data_dim) 
-
-    #lo_dim = 15 #q_dim
-    args.lo_dim = 15 #50 #15 #q_dim
-    lo_dim = args.lo_dim
-    #sketch_data = False 
-    sketch_data = True
-    if sketch_data: 
-        #'''
-        dataset, dataset_cls = utils.load_data('data/graphs{}rand.pkl'.format(data_dim))
-        #dataset = dataset[10:-50]
-        #dataset_cls = dataset_cls[10:-50]
-        #dataset = dataset[:20]
-        #dataset_cls = dataset_cls[:20]        
-        lo_graphs = sketch_graph(dataset, lo_dim, args)
-        with open('data/graphs_sketch{}_{}rand.pkl'.format(data_dim,lo_dim), 'wb') as f:
-            pickle.dump({'graphs':lo_graphs, 'labels':dataset_cls}, f)
-        #'''
-        #~~~#
-        #'''
-        queries, target = utils.load_data('data/queries{}rand.pkl'.format(q_dim))
-        lo_queries = sketch_graph(queries, lo_dim, args)
-        with open('data/queries_sketch{}_{}rand.pkl'.format(q_dim, lo_dim), 'wb') as f:
-            pickle.dump({'graphs':lo_queries, 'labels':target}, f)
-        #'''
-        print('Done sketching graphs!')
-        
     args.n_epochs = 340 
     #whether to compress graph
     #use_sketch = False #True #True #False #False #True #True
-    use_sketch = True
-    #args.use_imdb = True #False #True
-    args.use_imdb = False
-    if args.use_imdb:
-        dataset_name = 'Proteins' 
-        print('dataste name {}'.format(dataset_name))
-        data, node_labels, cls = utils.fetch_data_graphs(dataset_name)
-        #data, node_labels, cls = utils.fetch_data(dataset_name)
-        n_q = 10 #30 #30 #30        
-        n_data = 30 #100 #100 #100
-        n_runs = 1 # 10
-        ot_acc_l = np.zeros(n_runs)
-        gw_acc_l = np.zeros(n_runs)
-        netlsd_acc_l = np.zeros(n_runs)
-        combine_acc_l = np.zeros(n_runs)
-        for i in range(n_runs):        
-            #dataset0, queries0, dataset_cls, target = sklearn.model_selection.train_test_split(data, cls, test_size=.2, random_state=42*i)            
-            dataset0, queries0, dataset_cls, target = sklearn.model_selection.train_test_split(data, cls, test_size=.2)
-            
-            dataset0, queries0, dataset_cls, target = dataset0[:n_data], queries0[:n_q], dataset_cls[:n_data], target[:n_q]            
-            dataset, queries = dataset0, queries0
-            
-            ot_acc, gw_acc, netlsd_acc, combine_acc = classify(dataset, queries, dataset_cls, target, args, dataset0=dataset0, queries0=queries0)
-            ot_acc_l[i] = ot_acc
-            gw_acc_l[i] = gw_acc
-            netlsd_acc_l[i] = netlsd_acc
-            combine_acc_l[i] = combine_acc
-            print('SO FAR mean ot acc ({}) ot std {} gw acc {} gw std {} netlsd acc {} netlsd std {} combine acc {} combine std {}'.format(np.mean(ot_acc_l[:i+1]), np.std(ot_acc_l[:i+1]), np.mean(gw_acc_l[:i+1]), np.std(gw_acc_l[:i+1]), np.mean(netlsd_acc_l[:i+1]), np.std(netlsd_acc_l[:i+1]), np.mean(combine_acc_l[:i+1]), np.std(combine_acc_l[:i+1]) ))
-            
-        print('mean ot acc {} ot std {} gw acc {} gw std {} netlsd acc {} netlsd std {}'.format(np.mean(ot_acc_l), np.std(ot_acc_l), np.mean(gw_acc_l), np.std(gw_acc_l), np.mean(netlsd_acc_l), np.std(netlsd_acc_l) ))
+    use_sketch = True    
         
+    if args.dataset_type == 'real':
+        dataset0, queries0, dataset_cls, target = main_real_data(args)
     else:
+        #synthetic data
+        scheme = 'lo_hi' #in format of query_data. 'hi_lo'
+        if scheme == 'lo_hi':
+            #q stands for query
+            q_dim, data_dim = 20, 20 #50 #100
+            #q_dim, data_dim = 20, 30 #100
+        else:
+            q_dim, data_dim = 20, 10
+
+        args.n_per_cls = 1 #15 
+        args.query_n_per_cls = 1 #15 # set to 1 for testing runtime
+        #use command line to set GOT and GW parameters, sample settings: args.st_it, args.st_tau, args.st_n_samples, args.st_epochs, args.st_lr = 5, 1, 10, 1000, .5    
+        #generate_graph = False
+        generate_graph = True
+        if generate_graph: 
+            create_graphs(q_dim, args, 'data/queries{}rand.pkl'.format(q_dim), n_graphs=args.query_n_per_cls, low=q_dim) 
+            create_graphs(data_dim, args, 'data/graphs{}rand.pkl'.format(data_dim), n_graphs=args.n_per_cls, low=data_dim) 
+        
+        #lo_dim = 15 #q_dim
+        args.lo_dim = 15 #50 #15 #q_dim
+        lo_dim = args.lo_dim
+        #sketch_data = False 
+        sketch_data = True
+        if sketch_data: 
+            #'''
+            dataset, dataset_cls = utils.load_data('data/graphs{}rand.pkl'.format(data_dim))
+            #dataset = dataset[10:-50]
+            #dataset_cls = dataset_cls[10:-50]
+            #dataset = dataset[:20]
+            #dataset_cls = dataset_cls[:20]        
+            lo_graphs = sketch_graph(dataset, lo_dim, args)
+            with open('data/graphs_sketch{}_{}rand.pkl'.format(data_dim,lo_dim), 'wb') as f:
+                pickle.dump({'graphs':lo_graphs, 'labels':dataset_cls}, f)
+            #'''
+            #~~~#
+            queries, target = utils.load_data('data/queries{}rand.pkl'.format(q_dim))
+            lo_queries = sketch_graph(queries, lo_dim, args)
+            with open('data/queries_sketch{}_{}rand.pkl'.format(q_dim, lo_dim), 'wb') as f:
+                pickle.dump({'graphs':lo_queries, 'labels':target}, f)
+            print('Done sketching graphs!')
+
         dataset0, dataset_cls = utils.load_data('data/graphs{}rand.pkl'.format(data_dim))
         queries0, target = utils.load_data('data/queries{}rand.pkl'.format(q_dim))
         
-    if use_sketch:
+    if args.dataset_type == 'synthetic':
         #lo_dim = 10
         dataset, dataset_cls = utils.load_data('data/graphs_sketch{}_{}rand.pkl'.format(data_dim, lo_dim))        
         queries, target = utils.load_data('data/queries_sketch{}_{}rand.pkl'.format(q_dim, lo_dim))
@@ -677,18 +684,21 @@ if __name__ == '__main__':
     queries0 = queries0[::n_skip]
     '''
     print('queries n {} data n {}'.format(len(queries), len(dataset)))
-    #mutual information for community detection
+    #Toggle to compute mutual information for community detection
+    test_mi = True
     test_mi = False
-    print('Not testing mi')
     if test_mi: 
         #classify_st(queries, queries, target, target, args, dataset0=dataset0, queries0=queries0)
         run_perm_mi(args)
+    else:
+        print('Not testing mi')
+    #Toggle this switch to compare with GOT
     #do_compare_got = True
     do_compare_got = False
-    print('NOTE: can toggle between comparing with GOT or not. Currently this is set to {}'.format(do_compare_got))
+    print('NOTE: can toggle between whether to compare with GOT. Currently this is set to {}'.format(do_compare_got))
     if do_compare_got:
         print('Compare with GOT')
         classify_st(dataset, queries, dataset_cls, target, args, dataset0=dataset0, queries0=queries0)
     else:
         classify(dataset, queries, dataset_cls, target, args, dataset0=dataset0, queries0=queries0)
-    #pdb.set_trace()
+    

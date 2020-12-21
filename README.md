@@ -19,18 +19,26 @@ For instance, one can run COPT with:
 [`graph.py`](graph.py) contains core COPT routines for applications such as graph sketching and comparison.
 [`runGraph.py`](runGraph.py), [`searchGraph.py`](searchGraph.py), etc contain various applications for COPT.
 
-There is a [data](data) directory used by the scripts to write data to. There is some generated sample data provided.
+There is a [data](data) directory used by the scripts to write data to. There is some generated [sample data provided](data). Furthermore, if one wishes to generate graph data for other [named datasets](https://ls11-www.cs.tu-dortmund.de/staff/morris/graphkerneldatasets), one can run the `generateData.py` script with the dataset name such as:;
+```
+python generateData.py --dataset_type real --dataset_name BZR
+```
+A corresponding `lap.pt` data file will be created.
 
 ## Dependencies
 
 PyTorch 1.1+
 numpy
 networkx
-grakel
 netlsd
+grakel
 
-To install PyTorch
-The other packages can be installed via `pip`, e.g. `python -m pip install numpy networkx grakel netlsd`
+To install PyTorch, please follow these [simple OS-specific instructions](https://pytorch.org/get-started/locally/).
+
+The other packages can be installed via `pip`, e.g. `python -m pip install numpy networkx grakel netlsd`. Or by running
+```
+pip install -r requirements.txt
+```
 
 Depending on the functionalities one wishes to run, additional dependencies include:
 [Gromov Wasserstein by Vayer et al](https://github.com/tvayer/FGW), can be placed as "gromov" in directory above this one.

@@ -17,7 +17,7 @@ from tqdm import tqdm
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.data import Dataset
 from sklearn.model_selection import GridSearchCV
-import stochastic as st
+import got_stochastic as st
 import torch.nn as nn
 import sys
 import runGraph

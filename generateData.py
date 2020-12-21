@@ -5,14 +5,12 @@ Also parse and generate graph data from various real datasets, e.g. MSRC.
 import _init_paths
 import utils
 import graph
-import lib.graph as gwGraph
 import networkx as nx
 import torch
-from lib.ot_distances import Fused_Gromov_Wasserstein_distance
 import numpy as np
 import pickle
 from tqdm import tqdm
-import stochastic as st
+import got_stochastic as st
 import runGraph
 import os
 import grakel
@@ -80,8 +78,8 @@ def generate_real_data(dataset_name='msrc'):
                 #node_label[k-1] = l
                 node_label[i] = l
             except Exception as e:
-                print('e!', e)
-                pdb.set_trace()
+                print('Exception ', e)
+                #pdb.set_trace()
                 break
             
         total_nodes += len(lap)
@@ -90,14 +88,16 @@ def generate_real_data(dataset_name='msrc'):
         lap_l.append(torch.from_numpy(lap))
 
     print('dataset {} avg nodes {}'.format(dataset_name, total_nodes / len(lap_l)))
-    pdb.set_trace()
-    torch.save({'lap':lap_l, 'labels':node_labels, 'target':target}, '{}_lap.pt'.format(dataset_name)) #os.path.join('data', dataset_name)))
+    
+    torch.save({'lap':lap_l, 'labels':node_labels, 'target':target}, 'data/{}_lap.pt'.format(dataset_name)) #os.path.join('data', dataset_name)))
     return lap_l, node_labels, target
 
 def test_FGW(args):
     """
     Fused Gromov-Wasserstein distance
     """
+    import lib.graph as gwGraph
+    from lib.ot_distances import Fused_Gromov_Wasserstein_distance
     args.m = 8
     args.n = 4
     if args.fix_seed:
@@ -207,18 +207,17 @@ if __name__ == '__main__':
     args.n_per_cls = 500 #200 #20 #15 #5 #15 # 20 #5
     #create_graphs(30, args, 'data/graphs{}.pkl'.format(30), n_graphs=args.n_per_cls) #do 30 to 10
 
-    do_create_graph = False
-    if do_create_graph:
-        #runGraph.create_graphs(q_dim, args, 'data/queries{}rand.pkl'.format(q_dim), n_graphs=10, low=data_dim)
-        runGraph.create_graphs(data_dim, args, 'data/train_graphs{}rand.pkl'.format(data_dim), n_graphs=args.n_per_cls, low=data_dim) #do 30 to 10
-    do_generate_data = True
-    if do_generate_data:
+    if args.dataset_type == 'real':
         dataset_name = args.dataset_name #e.g. 'IMDB-MULTI' 
-        generate_real_data(dataset_name)
+        generate_real_data(dataset_name)    
+    else:
+        #runGraph.create_graphs(q_dim, args, 'data/queries{}rand.pkl'.format(q_dim), n_graphs=10, low=data_dim)
+        runGraph.create_graphs(data_dim, args, 'data/train_graphs{}rand.pkl'.format(data_dim), n_graphs=args.n_per_cls, low=data_dim) #do 30 to 10    
 
     lo_dim = 10 #15 #25 #15 #q_dim
     do_sketch_data = False
-    if do_sketch_data: 
+    if do_sketch_data:
+        #This can be used to sketch previously generated graphs en masse
         #'''
         dataset, dataset_cls = utils.load_data('data/train_graphs{}rand.pkl'.format(data_dim))
         #dataset = dataset[10:-50]
